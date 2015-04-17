@@ -1,0 +1,114 @@
+#!/usr/bin/php
+<?php
+
+	if(!isset($argv[1]) or $argv[1]=="" or $argv[1]=="-h" or $argv[1]=="--help")
+	{
+		echo "\nNmapCat v0.1\nAdam McKissock - @t3rminalV\n\nUsage: ./nmapcat.php nmapScan1.xml nmapScan2.xml...nmapScan[n].xml...\n\nYou can also specify one of the following:\n--host=?\n--port=?\n--tunnel=?\n--service=?\n--all\n\nMore to follow!\n\n";
+		die();
+	}
+
+	$argCount = 0;
+	$nmapFiles = array();
+	$findPort = "";
+	$findHost = "";
+	$findTunnel = "";
+	$findService = "";
+	$findAll = false;
+
+	foreach($argv as $arg)
+	{
+		if($argCount != 0)
+		{
+			if(strpos($arg, "--") !== FALSE)
+			{
+				if(strpos($arg, "--host=") !== FALSE)
+				{
+                                        $tmp = explode("=", $arg);
+                                        $findHost = $tmp[1];
+                                        unset($tmp);
+                                }
+				if(strpos($arg, "--port=") !== FALSE)
+				{
+					$tmp = explode("=", $arg);
+					$findPort = $tmp[1];
+					unset($tmp);
+				}
+				if(strpos($arg, "--tunnel=") !== FALSE)
+                                {
+                                        $tmp = explode("=", $arg);
+                                        $findTunnel = $tmp[1];
+                                        unset($tmp);
+                                }
+				if(strpos($arg, "--service=") !== FALSE)
+                                {
+					$tmp = explode("=", $arg);
+                                        $findService = $tmp[1];
+                                        unset($tmp);
+                                }
+				if(strpos($arg, "--all") !== FALSE)
+                                {
+                                        $findAll = true;
+                                }
+			}
+			else
+			{
+				array_push($nmapFiles, $arg);
+			}
+		}
+		$argCount++;
+	}
+
+	$holder = "";
+
+	$hostInfo = array();
+	$portInfo = array();
+
+	foreach($nmapFiles as $nmapFile)
+	{
+		$nmapScan = simplexml_load_file($nmapFile);
+		foreach($nmapScan->host as $host)
+		{
+			$hostIP = (string)$host->address['addr'];
+			if(!array_key_exists($hostIP, $hostInfo))
+			{
+				$hostInfo[$hostIP] = array('ports' => array(), 'os' => array());
+			}
+			foreach($host->ports->port as $port)
+			{
+				$portNum = (string)$port['portid'];
+				$portDetails = array();
+				$portDetails['protocol'] = (string)$port['protocol'];
+				$portDetails['name'] = ((string)$port->service['name'] ? (string)$port->service['name'] : "-");
+				$portDetails['tunnel'] = ((string)$port->service['tunnel'] ? (string)$port->service['tunnel'] :  "-");
+				$portDetails['product'] = ((string)$port->service['product'] ? (string)$port->service['product'] : "-");
+				$portDetails['version'] = ((string)$port->service['version'] ? (string)$port->service['version'] : "-");
+				$portInfo[$portNum] = $portDetails;
+			}
+			$allPortInfo = $hostInfo[$hostIP]['ports'] + $portInfo;
+			ksort($allPortInfo);
+			$hostInfo[$hostIP] = array('ports' => $allPortInfo);
+			$portInfo = array();
+			unset($allPortInfo);
+
+			$hostInfo[$hostIP]['os'] = array('name' => (string)$host->os->osmatch['name'], 'probability' => (string)$host->os->osmatch['accuracy']);
+		}
+	}
+	if($findPort != "" or $findHost != "" or $findTunnel != "" or $findService != "" or $findAll == true)
+	{
+		foreach($hostInfo as $hostIP => $hostDetails)
+		{
+			$printAll = false;
+			if($hostIP == $findHost)
+			{
+				$printAll = true;
+			}
+			foreach($hostDetails['ports'] as $portNumber => $portDetails)
+			{
+				if($printAll or $findPort === (string)$portNumber or $findTunnel === $portDetails['tunnel'] or stripos($portDetails['product'], $findService) !== FALSE or stripos($portDetails['name'], $findService) !== FALSE or $findAll)
+				{
+					echo $hostIP."/".$portNumber."/".$portDetails['protocol']."/".$portDetails['name']."/".$portDetails['tunnel']."/".$portDetails['product']."/".$portDetails['version']."\n";
+				}
+			}
+		}
+	}
+?>
